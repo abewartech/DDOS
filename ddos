@@ -17,14 +17,38 @@ RESET="\033[00m" #normal
 orange='\e[38;5;166m'
 #WARNING !!!
 
-##OPENWRT SUPPORT##
-# Detect if we are running on OpenWrt
+##PLATFORM DETECTION##
+# Detect OpenWrt
 IS_OPENWRT=0
 if [ -f /etc/openwrt_release ]; then
     IS_OPENWRT=1
 fi
 
-# Detect hping3 binary location (OpenWrt uses /usr/bin, Debian/Arch use /usr/sbin)
+# Detect Windows environment (WSL, Git Bash, Cygwin, MSYS2)
+IS_WINDOWS=0
+IS_WSL=0
+IS_GITBASH=0
+IS_CYGWIN=0
+
+# Check WSL: /proc/version contains 'microsoft' or 'WSL'
+if [ -f /proc/version ]; then
+    if grep -qi 'microsoft\|WSL' /proc/version 2>/dev/null; then
+        IS_WSL=1
+        IS_WINDOWS=1
+    fi
+fi
+# Check Git Bash / MSYS2
+if [ "$MSYSTEM" = "MINGW64" ] || [ "$MSYSTEM" = "MINGW32" ] || [ "$MSYSTEM" = "MSYS" ]; then
+    IS_GITBASH=1
+    IS_WINDOWS=1
+fi
+# Check Cygwin
+if uname -s 2>/dev/null | grep -qi 'cygwin'; then
+    IS_CYGWIN=1
+    IS_WINDOWS=1
+fi
+
+# Detect hping3 binary location (OpenWrt: /usr/bin, Debian/Arch: /usr/sbin)
 HPING3_BIN=""
 for _hping_path in /usr/sbin/hping3 /usr/bin/hping3; do
     if [ -f "$_hping_path" ]; then
@@ -33,8 +57,9 @@ for _hping_path in /usr/sbin/hping3 /usr/bin/hping3; do
     fi
 done
 
-# Check for required tools and warn on OpenWrt if missing
-check_openwrt_deps() {
+# Platform-aware dependency check
+check_platform_deps() {
+    # ---- OpenWrt ----
     if [ "$IS_OPENWRT" = "1" ]; then
         echo -e "${yellow}[OpenWrt detected] Checking dependencies...${RESET}"
         MISSING_PKGS=""
@@ -57,11 +82,58 @@ check_openwrt_deps() {
             echo -e "${okegreen}[OpenWrt] All dependencies found.${RESET}"
         fi
     fi
-}
-##/OPENWRT SUPPORT##
 
-# resize terminal - not available on OpenWrt/BusyBox, guard it safely
-if [ "$IS_OPENWRT" = "0" ] && command -v resize >/dev/null 2>&1; then
+    # ---- Windows (WSL / Git Bash / Cygwin) ----
+    if [ "$IS_WINDOWS" = "1" ]; then
+        if [ "$IS_WSL" = "1" ]; then
+            _winenv="WSL (Windows Subsystem for Linux)"
+        elif [ "$IS_GITBASH" = "1" ]; then
+            _winenv="Git Bash / MSYS2"
+        elif [ "$IS_CYGWIN" = "1" ]; then
+            _winenv="Cygwin"
+        else
+            _winenv="Windows (unknown shell)"
+        fi
+        echo -e "${yellow}[Windows] Detected environment: $_winenv${RESET}"
+
+        # Warn about modules with limited Windows support
+        if [ "$IS_GITBASH" = "1" ] || [ "$IS_CYGWIN" = "1" ]; then
+            echo -e "${red}[Windows] WARNING: Raw-socket modules (SYN/ACK/RST/UDP Flood, Distraction Scan)${RESET}"
+            echo -e "${red}          require Linux kernel access and will NOT work in Git Bash or Cygwin.${RESET}"
+            echo -e "${yellow}          Use WSL for full functionality: wsl --install${RESET}"
+            echo ""
+        fi
+
+        # Dependency check (apt style for WSL)
+        MISSING_PKGS=""
+        command -v curl    >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS curl"
+        command -v nmap    >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS nmap"
+        command -v hping3  >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS hping3"
+        command -v openssl >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS openssl"
+        command -v whois   >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS whois"
+        command -v stunnel >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS stunnel"
+        command -v nc      >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS netcat-openbsd"
+        if [ -n "$MISSING_PKGS" ]; then
+            echo -e "${red}[Windows] Missing tools: $MISSING_PKGS${RESET}"
+            if [ "$IS_WSL" = "1" ]; then
+                echo -e "${yellow}Install with: sudo apt update && sudo apt install -y$MISSING_PKGS${RESET}"
+            elif [ "$IS_CYGWIN" = "1" ]; then
+                echo -e "${yellow}Install via Cygwin setup.exe, add packages: $MISSING_PKGS${RESET}"
+            fi
+            echo -n "Continue anyway? [y/N]: "
+            read _cont
+            if [ "$_cont" != "y" ] && [ "$_cont" != "Y" ]; then
+                echo "Exiting. Install missing packages first." && exit 1
+            fi
+        else
+            echo -e "${okegreen}[Windows] All tools found. Full functionality available.${RESET}"
+        fi
+    fi
+}
+##/PLATFORM DETECTION##
+
+# resize terminal - guard for OpenWrt (no resize) and Git Bash (resize may fail)
+if [ "$IS_OPENWRT" = "0" ] && [ "$IS_GITBASH" = "0" ] && command -v resize >/dev/null 2>&1; then
     resize -s 70 90 > /dev/null
 fi
 clear
@@ -103,8 +175,8 @@ echo -e $lightgreen
 #set the prompt to show you are in pentmenu and not standard shell
 PS3="Pentmenu@evsystem>"
 
-# Run OpenWrt dependency check once at startup
-check_openwrt_deps
+# Run platform dependency check once at startup (handles OpenWrt + Windows/WSL)
+check_platform_deps
 
 ##MAINMENU##
 ##################

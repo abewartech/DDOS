@@ -14,7 +14,7 @@ Designed to be a simple way to implement various network pentesting functions, i
 
 **Sudo is implemented where necesssary.**
 
-Tested on Debian, Arch, and OpenWrt.
+Tested on Debian, Arch, OpenWrt, and Windows (via WSL / Git Bash / Cygwin).
 
 
 
@@ -62,27 +62,109 @@ The script supports **OpenWrt** routers with the following additional steps:
 
 4. The script will automatically detect OpenWrt and check for missing dependencies at startup, offering `opkg install` commands for any missing tools.
 
+## Windows Support
+
+The script runs on Windows through any of the following environments.
+Double-click **`ddos.bat`** (or run **`ddos.ps1`** in PowerShell) — the launcher
+auto-detects your environment and starts the script automatically.
+
+### Option 1 — WSL *(Recommended — full functionality)*
+
+WSL gives you a real Linux kernel, so all modules including raw-socket floods work.
+
+1. **Enable WSL** (PowerShell as Administrator):
+   ```powershell
+   wsl --install
+   ```
+   Restart your PC when prompted.
+
+2. **Install dependencies** inside Ubuntu:
+   ```bash
+   sudo apt update && sudo apt install -y \
+     bash curl nmap hping3 netcat-openbsd openssl stunnel whois
+   ```
+
+3. **Launch** — double-click `ddos.bat` or run in PowerShell:
+   ```powershell
+   .\ddos.ps1
+   ```
+   Or from WSL directly:
+   ```bash
+   bash ./ddos
+   ```
+
+> 💡 Run the launcher as **Administrator** for raw-socket attacks to work correctly.
+
+---
+
+### Option 2 — Git Bash *(Limited — no raw-socket modules)*
+
+Git Bash cannot access raw sockets, so SYN/ACK/RST/UDP floods and the Distraction
+Scan will **not** work. Recon and Extraction modules work fine.
+
+1. Download and install [Git for Windows](https://git-scm.com/download/win).
+2. Double-click `ddos.bat` — it will auto-detect Git Bash and launch.
+
+---
+
+### Option 3 — Cygwin *(Moderate support)*
+
+1. Download [Cygwin](https://www.cygwin.com/) and during setup install:
+   `bash`, `curl`, `nmap`, `netcat`, `openssl`, `whois`
+2. Double-click `ddos.bat` — it will auto-detect Cygwin and launch.
+
+---
+
+### Windows Module Compatibility
+
+| Module | WSL | Git Bash | Cygwin |
+|---|:---:|:---:|:---:|
+| Show IP / DNS Recon | ✅ | ✅ | ✅ |
+| Ping Sweep / Quick Scan | ✅ | ✅ | ✅ |
+| Detailed Scan / UDP Scan | ✅ | ✅ | ✅ |
+| Check Server Uptime | ✅ | ⚠️ | ⚠️ |
+| TCP SYN / ACK / RST Flood | ✅ | ❌ | ❌ |
+| UDP Flood | ✅ | ❌ | ❌ |
+| SSL DOS | ✅ | ✅ | ✅ |
+| Slowloris | ✅ | ✅ | ✅ |
+| Distraction Scan | ✅ | ❌ | ❌ |
+| Send File / Listener | ✅ | ✅ | ✅ |
+
+> ✅ Full support &nbsp; ⚠️ Partial &nbsp; ❌ Not supported
+
 ## How to use?
 
+### Linux / macOS / WSL
 
 - Download the script:
 
-```
-$ wget https://raw.githubusercontent.com/ekovegeance/DDOS/master/ddos
+```bash
+wget https://raw.githubusercontent.com/ekovegeance/DDOS/master/ddos
 ```
 
 - Make it executable:
 
-```
-$ chmod +x ./ddos
+```bash
+chmod +x ./ddos
 ```
 
 - Run it:
 
-```
-$ ./ddos
+```bash
+./ddos
 ```
 
+### Windows
+
+- Download the repo or grab `ddos`, `ddos.bat`, and `ddos.ps1`
+- **Double-click `ddos.bat`** — auto-detects WSL / Git Bash / Cygwin and launches
+- Or open PowerShell and run:
+
+```powershell
+.\ddos.ps1
+```
+
+> First time? The launcher will tell you exactly what to install if anything is missing.
 
 
 ## Module detail
