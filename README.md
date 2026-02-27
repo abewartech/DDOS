@@ -14,7 +14,7 @@ Designed to be a simple way to implement various network pentesting functions, i
 
 **Sudo is implemented where necesssary.**
 
-Tested on Debian and Arch.
+Tested on Debian, Arch, and OpenWrt.
 
 
 
@@ -39,6 +39,28 @@ Tested on Debian and Arch.
 * whois (not essential but preferred)
 
 * nslookup (or 'host')
+
+## OpenWrt Support
+
+The script supports **OpenWrt** routers with the following additional steps:
+
+1. **Install bash** (OpenWrt uses `ash` by default):
+   ```
+   opkg update && opkg install bash
+   ```
+
+2. **Install required packages** via `opkg`:
+   ```
+   opkg update && opkg install curl nmap hping3 libopenssl-legacy whois stunnel netcat
+   ```
+   > Note: Not all packages may be available in all OpenWrt feeds. Check your router's architecture and feed configuration.
+
+3. **Run the script with bash explicitly**:
+   ```
+   bash ./ddos
+   ```
+
+4. The script will automatically detect OpenWrt and check for missing dependencies at startup, offering `opkg install` commands for any missing tools.
 
 ## How to use?
 
